@@ -12,11 +12,11 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-.PHONY: all app deps search rel docs install-docs check tests clean distclean help erlang-mk
+.PHONY: all app apps deps search rel docs install-docs check tests clean distclean help erlang-mk
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 2.0.0-pre.2-114-ge629cf3
+ERLANG_MK_VERSION = 2.0.0-pre.2-130-gc6fe5ea
 
 # Core configuration.
 
@@ -24,6 +24,7 @@ PROJECT ?= $(notdir $(CURDIR))
 PROJECT := $(strip $(PROJECT))
 
 PROJECT_VERSION ?= rolling
+PROJECT_MOD ?= $(PROJECT)_app
 
 # Verbosity.
 
@@ -147,28 +148,13 @@ else
 core_native_path = $1
 endif
 
-ifeq ($(shell which wget 2>/dev/null | wc -l), 1)
+ifeq ($(strip $(shell which wget 2>/dev/null | wc -l)), 1)
 define core_http_get
-	wget --no-check-certificate -O $(1) $(2)|| rm $(1)
+	wget --quiet --no-check-certificate -O $(1) $(2)|| rm $(1)
 endef
 else
-define core_http_get.erl
-	ssl:start(),
-	inets:start(),
-	case httpc:request(get, {"$(2)", []}, [{autoredirect, true}], []) of
-		{ok, {{_, 200, _}, _, Body}} ->
-			case file:write_file("$(1)", Body) of
-				ok -> ok;
-				{error, R1} -> halt(R1)
-			end;
-		{error, R2} ->
-			halt(R2)
-	end,
-	halt(0).
-endef
-
 define core_http_get
-	$(call erlang,$(call core_http_get.erl,$(call core_native_path,$1),$2))
+	curl -kLf$(if $(filter-out 0,$(V)),,s)o $(call core_native_path,$1) $2
 endef
 endif
 
@@ -199,9 +185,6 @@ endif
 	$(MAKE) -C $(ERLANG_MK_BUILD_DIR)
 	cp $(ERLANG_MK_BUILD_DIR)/erlang.mk ./erlang.mk
 	rm -rf $(ERLANG_MK_BUILD_DIR)
-
-# The erlang.mk package index is bundled in the default erlang.mk build.
-# Search for the string "copyright" to skip to the rest of the code.
 
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
@@ -280,16 +263,35 @@ dep_verbose = $(dep_verbose_$(V))
 
 # Core targets.
 
+ifdef IS_APP
+apps::
+else
+apps:: $(ALL_APPS_DIRS)
+ifeq ($(IS_APP)$(IS_DEP),)
+	$(verbose) rm -f $(ERLANG_MK_TMP)/apps.log
+endif
+	$(verbose) mkdir -p $(ERLANG_MK_TMP)
+# Create ebin directory for all apps to make sure Erlang recognizes them
+# as proper OTP applications when using -include_lib. This is a temporary
+# fix, a proper fix would be to compile apps/* in the right order.
+	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
+		mkdir -p $$dep/ebin || exit $$?; \
+	done
+	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
+		if grep -qs ^$$dep$$ $(ERLANG_MK_TMP)/apps.log; then \
+			:; \
+		else \
+			echo $$dep >> $(ERLANG_MK_TMP)/apps.log; \
+			$(MAKE) -C $$dep IS_APP=1 || exit $$?; \
+		fi \
+	done
+endif
+
 ifneq ($(SKIP_DEPS),)
 deps::
 else
-deps:: $(ALL_DEPS_DIRS)
-ifndef IS_APP
-	$(verbose) for dep in $(ALL_APPS_DIRS) ; do \
-		$(MAKE) -C $$dep IS_APP=1 || exit $$?; \
-	done
-endif
-ifneq ($(IS_DEP),1)
+deps:: $(ALL_DEPS_DIRS) apps
+ifeq ($(IS_APP)$(IS_DEP),)
 	$(verbose) rm -f $(ERLANG_MK_TMP)/deps.log
 endif
 	$(verbose) mkdir -p $(ERLANG_MK_TMP)
@@ -318,7 +320,10 @@ define dep_autopatch
 		$(call erlang,$(call dep_autopatch_appsrc.erl,$(1))); \
 		$(call dep_autopatch_erlang_mk,$(1)); \
 	elif [ -f $(DEPS_DIR)/$(1)/Makefile ]; then \
-		if [ 0 != `grep -c "include ../\w*\.mk" $(DEPS_DIR)/$(1)/Makefile` ]; then \
+		if [ 0 != `grep -c "include erlang.mk" $(DEPS_DIR)/$(1)/Makefile` ]; then \
+			$(call erlang,$(call dep_autopatch_appsrc.erl,$(1))); \
+			$(call dep_autopatch_erlang_mk,$(1)); \
+		elif [ 0 != `grep -c "include ../\w*\.mk" $(DEPS_DIR)/$(1)/Makefile` ]; then \
 			$(call dep_autopatch2,$(1)); \
 		elif [ 0 != `grep -ci rebar $(DEPS_DIR)/$(1)/Makefile` ]; then \
 			$(call dep_autopatch2,$(1)); \
@@ -749,6 +754,35 @@ define dep_fetch
 			fail))
 endef
 
+GIT_VSN := $(shell git --version | grep -oE "[0-9]{1,2}\.[0-9]{1,2}")
+GIT_VSN_17_COMP := $(shell echo -e "$(GIT_VSN)\n1.7" | sort -V | tail -1)
+ifeq ($(GIT_VSN_17_COMP),1.7)
+	MAYBE_SHALLOW :=
+else
+	MAYBE_SHALLOW := -c advice.detachedHead=false --depth 1
+endif
+
+# Override default git full-clone with depth=1 shallow-clone
+ifeq ($(GIT_VSN_17_COMP),1.7)
+define dep_fetch_git-emqx
+	git clone -q -n -- $(call dep_repo,$(1)) $(DEPS_DIR)/$(call dep_name,$(1)); \
+		cd $(DEPS_DIR)/$(call dep_name,$(1)) && git checkout -q $(call dep_commit,$(1))
+endef
+else
+define dep_fetch_git-emqx
+	git clone -q -c advice.detachedHead=false --depth 1 -b $(call dep_commit,$(1)) -- $(call dep_repo,$(1)) $(DEPS_DIR)/$(call dep_name,$(1))
+endef
+endif
+
+core_http_get-emqx = curl -Lf$(if $(filter-out 0,$(V)),,s)o $(call core_native_path,$1) $2
+
+define dep_fetch_hex-emqx
+    mkdir -p $(ERLANG_MK_TMP)/hex $(DEPS_DIR)/$1; \
+    $(call core_http_get-emqx,$(ERLANG_MK_TMP)/hex/$1.tar,\
+        https://repo.hex.pm/tarballs/$1-$(strip $(word 2,$(dep_$1))).tar); \
+    tar -xOf $(ERLANG_MK_TMP)/hex/$1.tar contents.tar.gz | tar -C $(DEPS_DIR)/$1 -xzf -;
+endef
+
 define dep_target
 $(DEPS_DIR)/$(call dep_name,$1):
 	$(eval DEP_NAME := $(call dep_name,$1))
@@ -978,7 +1012,7 @@ app:: clean deps $(PROJECT).d
 	$(verbose) $(MAKE) --no-print-directory app-build
 endif
 
-ifeq ($(wildcard src/$(PROJECT)_app.erl),)
+ifeq ($(wildcard src/$(PROJECT_MOD).erl),)
 define app_file
 {application, $(PROJECT), [
 	{description, "$(PROJECT_DESCRIPTION)"},
@@ -998,7 +1032,7 @@ define app_file
 	{modules, [$(call comma_list,$(2))]},
 	{registered, [$(call comma_list,$(PROJECT)_sup $(PROJECT_REGISTERED))]},
 	{applications, [$(call comma_list,kernel stdlib $(OTP_DEPS) $(LOCAL_DEPS) $(DEPS))]},
-	{mod, {$(PROJECT)_app, []}}
+	{mod, {$(PROJECT_MOD), []}}
 ]}.
 endef
 endif
@@ -1150,13 +1184,13 @@ ebin/:
 
 define compile_erl
 	$(erlc_verbose) erlc -v $(if $(IS_DEP),$(filter-out -Werror,$(ERLC_OPTS)),$(ERLC_OPTS)) -o ebin/ \
-		-pa ebin/ -I include/ $(filter-out $(ERLC_EXCLUDE_PATHS),$(COMPILE_FIRST_PATHS) $(1))
+		-pz ebin/ -I include/ $(filter-out $(ERLC_EXCLUDE_PATHS),$(COMPILE_FIRST_PATHS) $(1))
 endef
 
 ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES) $(wildcard src/$(PROJECT).app.src)
 	$(eval FILES_TO_COMPILE := $(filter-out src/$(PROJECT).app.src,$?))
 	$(if $(strip $(FILES_TO_COMPILE)),$(call compile_erl,$(FILES_TO_COMPILE)))
-	$(eval GITDESCRIBE := $(shell git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null || true))
+	$(eval GITDESCRIBE := $(shell git describe --abbrev=8 --tags --always 2>/dev/null))
 	$(eval MODULES := $(patsubst %,'%',$(sort $(notdir $(basename \
 		$(filter-out $(ERLC_EXCLUDE_PATHS),$(ERL_FILES) $(CORE_FILES) $(BEAM_FILES)))))))
 ifeq ($(wildcard src/$(PROJECT).app.src),)
@@ -1169,7 +1203,7 @@ else
 	fi
 	$(appsrc_verbose) cat src/$(PROJECT).app.src \
 		| sed "s/{[[:space:]]*modules[[:space:]]*,[[:space:]]*\[\]}/{modules, \[$(call comma_list,$(MODULES))\]}/" \
-		| sed "s/{id,[[:space:]]*\"git\"}/{id, \"$(subst /,\/,$(GITDESCRIBE))\"}/" \
+		| sed "s/{vsn,[[:space:]]*\"git\"}/{vsn, \"$(subst /,\/,$(GITDESCRIBE))\"}/" \
 		> ebin/$(PROJECT).app
 endif
 
@@ -2428,7 +2462,7 @@ endif
 RELX ?= $(CURDIR)/relx
 RELX_CONFIG ?= $(CURDIR)/relx.config
 
-RELX_URL ?= https://github.com/erlware/relx/releases/download/v3.5.0/relx
+RELX_URL ?= https://github.com/erlware/relx/releases/download/v3.19.0/relx
 RELX_OPTS ?=
 RELX_OUTPUT_DIR ?= _rel
 
@@ -2446,7 +2480,7 @@ rel:: relx-rel
 endif
 endif
 
-distclean:: distclean-relx-rel distclean-relx
+distclean:: distclean-relx-rel
 
 # Plugin-specific targets.
 
