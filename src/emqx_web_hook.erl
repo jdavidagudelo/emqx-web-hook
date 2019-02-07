@@ -170,6 +170,7 @@ on_session_terminated(#{}, Reason, _Env) ->
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>}, _Env) ->
     {ok, Message};
 on_message_publish(Message = #message{topic = Topic, flags = #{retain := Retain}}, {Filter}) ->
+    ?LOG(error, "VALUE OF TOPIC PUBLISHED: ~p", [Topic]),
     with_filter(
       fun() ->
         {FromClientId, FromUsername} = format_from(Message),
