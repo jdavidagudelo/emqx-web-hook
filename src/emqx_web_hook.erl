@@ -170,11 +170,9 @@ on_session_terminated(#{}, Reason, _Env) ->
 on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>}, _Env) ->
     {ok, Message};
 on_message_publish(Message = #message{topic = Topic, flags = #{retain := Retain}}, {Filter}) ->
-    ?LOG(error, "VALUE OF TOPIC PUBLISHED: ~p", [Topic]),
     with_filter(
       fun() ->
         {FromClientId, FromUsername} = format_from(Message),
-        ?LOG(error, "LOGGIN INSIDE FUNCTION: ~p", [Topic]),
         Params = [{action, message_publish},
                   {from_client_id, FromClientId},
                   {from_username, FromUsername},
@@ -277,10 +275,12 @@ with_filter(Fun, Msg, Topic, Filter) ->
         false -> {ok, Msg}
     end.
 
-format_from(Message = #message{from = From}) ->
-    format_from(Message#message{from = a2b(From)});
-format_from(#message{from = ClientId, headers = #{username := Username}}) ->
-    {a2b(ClientId), a2b(Username)}.
+format_from({ClientId, Username}) ->
+    {ClientId, Username};
+format_from(From) when is_atom(From) ->
+    {a2b(From), a2b(From)};
+format_from(_) ->
+    {<<>>, <<>>}.
 
 a2b(A) when is_atom(A) -> erlang:atom_to_binary(A, utf8);
 a2b(A) -> A.
