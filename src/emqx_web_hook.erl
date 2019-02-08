@@ -174,6 +174,7 @@ on_message_publish(Message = #message{topic = Topic, flags = #{retain := Retain}
     with_filter(
       fun() ->
         {FromClientId, FromUsername} = format_from(Message),
+        ?LOG(error, "LOGGIN INSIDE FUNCTION: ~p", [Topic]),
         Params = [{action, message_publish},
                   {from_client_id, FromClientId},
                   {from_username, FromUsername},
