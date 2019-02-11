@@ -172,19 +172,7 @@ on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>}, _Env) ->
 on_message_publish(Message = #message{topic = Topic, flags = #{retain := Retain}}, {Filter}) ->
     with_filter(
       fun() ->
-        ?LOG(error, "From: ~p", [Message#message.from]),
-        ?LOG(error, "Headers: ~p", [Message#message.headers]),
-
-        try
-            ?LOG(error, "Username: ~p", [maps:get("username", Message#message.headers)])
-        catch
-            Exception:Reason -> {caught, Exception, Reason}
-        end,
-
-
         {FromClientId, FromUsername} = format_from(Message),
-        ?LOG(error, "From => ~p", [FromClientId]),
-        ?LOG(error, "Headers => ~p", [FromUsername]),
         Params = [{action, message_publish},
                   {from_client_id, FromClientId},
                   {from_username, FromUsername},
@@ -287,11 +275,10 @@ with_filter(Fun, Msg, Topic, Filter) ->
         false -> {ok, Msg}
     end.
 
-format_from(Message = #message{from = From, headers = #{}}) ->
-    ?LOG(error, "From data: ~p", [From]),
-    {a2b(From), a2b(From)};
 format_from(#message{from = ClientId, headers = #{username := Username}}) ->
-    {a2b(ClientId), a2b(Username)}.
+    {a2b(ClientId), a2b(Username)};
+format_from(#message{from = From, headers = #{}}) ->
+    {a2b(From), a2b(From)}.
 
 a2b(A) when is_atom(A) -> erlang:atom_to_binary(A, utf8);
 a2b(A) -> A.
