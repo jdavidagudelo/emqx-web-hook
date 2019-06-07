@@ -12,11 +12,11 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-.PHONY: all app apps deps search rel docs install-docs check tests clean distclean help erlang-mk
+.PHONY: all app deps search rel docs install-docs check tests clean distclean help erlang-mk
 
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-ERLANG_MK_VERSION = 2.0.0-pre.2-130-gc6fe5ea
+ERLANG_MK_VERSION = 2.0.0-pre.2-114-ge629cf3
 
 # Core configuration.
 
@@ -24,7 +24,6 @@ PROJECT ?= $(notdir $(CURDIR))
 PROJECT := $(strip $(PROJECT))
 
 PROJECT_VERSION ?= rolling
-PROJECT_MOD ?= $(PROJECT)_app
 
 # Verbosity.
 
@@ -148,13 +147,28 @@ else
 core_native_path = $1
 endif
 
-ifeq ($(strip $(shell which wget 2>/dev/null | wc -l)), 1)
+ifeq ($(shell which wget 2>/dev/null | wc -l), 1)
 define core_http_get
-	wget --quiet --no-check-certificate -O $(1) $(2)|| rm $(1)
+	wget --no-check-certificate -O $(1) $(2)|| rm $(1)
 endef
 else
+define core_http_get.erl
+	ssl:start(),
+	inets:start(),
+	case httpc:request(get, {"$(2)", []}, [{autoredirect, true}], []) of
+		{ok, {{_, 200, _}, _, Body}} ->
+			case file:write_file("$(1)", Body) of
+				ok -> ok;
+				{error, R1} -> halt(R1)
+			end;
+		{error, R2} ->
+			halt(R2)
+	end,
+	halt(0).
+endef
+
 define core_http_get
-	curl -kLf$(if $(filter-out 0,$(V)),,s)o $(call core_native_path,$1) $2
+	$(call erlang,$(call core_http_get.erl,$(call core_native_path,$1),$2))
 endef
 endif
 
@@ -185,6 +199,9 @@ endif
 	$(MAKE) -C $(ERLANG_MK_BUILD_DIR)
 	cp $(ERLANG_MK_BUILD_DIR)/erlang.mk ./erlang.mk
 	rm -rf $(ERLANG_MK_BUILD_DIR)
+
+# The erlang.mk package index is bundled in the default erlang.mk build.
+# Search for the string "copyright" to skip to the rest of the code.
 
 # Copyright (c) 2015, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
