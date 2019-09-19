@@ -189,6 +189,8 @@ on_session_unsubscribed(#{client_id := ClientId}, Topic, _Opts, {Filter}) ->
 %% Session terminated
 %%--------------------------------------------------------------------
 
+on_session_terminated(Info, {shutdown, {shutdown, Reason}}, Env) when is_atom(Reason) ->
+    on_session_terminated(Info, Reason, Env);
 on_session_terminated(Info, {shutdown, Reason}, Env) when is_atom(Reason) ->
     on_session_terminated(Info, Reason, Env);
 on_session_terminated(#{client_id := ClientId}, Reason, _Env) when is_atom(Reason) ->
