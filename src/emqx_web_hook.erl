@@ -232,10 +232,11 @@ on_message_publish(Message = #message{topic = Topic, flags = #{retain := Retain}
 %% Message deliver
 %%--------------------------------------------------------------------
 on_message_deliver(ClientInfo, Message, Filter) ->
-  ?LOG(error, "Client disconnected, cannot encode reason: ~p ~p ~p", [ClientInfo, Message, Filter]),
+  {FromClientId, FromUsername} = format_from(Message),
+  ?LOG(error, "Client disconnected, cannot encode reason: ~p ~p ~p", [FromClientId, FromUsername]),
+  emqx_metrics:inc('web_hook.message_deliver'),
   ok;
 on_message_deliver(#{client_id := ClientId, username := Username}, Message = #message{topic = Topic, flags = #{retain := Retain}}, {Filter}) ->
-
   with_filter(
     fun() ->
       emqx_metrics:inc('web_hook.message_deliver'),
