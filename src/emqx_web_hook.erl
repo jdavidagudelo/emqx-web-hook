@@ -247,7 +247,7 @@ on_message_deliver(#{client_id := ClientId, username := Username}, Message, Filt
                 {topic, Topic},
                 {qos, Qos},
                 {retain, Retain},
-                {payload, encode_payload({Payload}},
+                {payload, encode_payload(Payload)},
                 {ts, emqx_time:now_secs(Timestamp)}],
       send_http_request(Params)
     end, Topic, Filter),
