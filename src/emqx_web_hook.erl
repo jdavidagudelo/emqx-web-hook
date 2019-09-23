@@ -200,9 +200,10 @@ on_session_terminated(#{client_id := ClientId}, Reason, _Env) when is_atom(Reaso
               {reason, Reason}],
     send_http_request(Params),
     ok;
-on_session_terminated(#{}, Reason, _Env) ->
-    ?LOG(error, "Session terminated, cannot encode the reason: ~p", [Reason]),
-    ok.
+on_session_terminated(Info, _Reason, Env) ->
+  on_session_terminated(Info, unknown_reason, Env),
+  % ?LOG(error, "Session terminated, cannot encode the reason: ~p", [Reason]),
+  ok.
 
 %%--------------------------------------------------------------------
 %% Message publish
