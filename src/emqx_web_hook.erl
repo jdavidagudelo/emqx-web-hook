@@ -232,8 +232,8 @@ on_message_publish(Message = #message{topic = Topic, flags = #{retain := Retain}
 %% Message deliver
 %%--------------------------------------------------------------------
 on_message_deliver(ClientInfo, Message, Filter) ->
-  {FromClientId, FromUsername} = format_from(Message),
-  ?LOG(error, "Client disconnected, cannot encode reason: ~p ~p ~p", [FromClientId, FromUsername]),
+  {_, _, _, _, _, _, Topic, Payload, _} = Message,
+  ?LOG(error, "Client disconnected, cannot encode reason: ~p ~p ~p", [Topic, Payload]),
   emqx_metrics:inc('web_hook.message_deliver'),
   ok;
 on_message_deliver(#{client_id := ClientId, username := Username}, Message = #message{topic = Topic, flags = #{retain := Retain}}, {Filter}) ->
