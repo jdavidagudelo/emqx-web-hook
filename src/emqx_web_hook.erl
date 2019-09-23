@@ -231,10 +231,26 @@ on_message_publish(Message = #message{topic = Topic, flags = #{retain := Retain}
 %%--------------------------------------------------------------------
 %% Message deliver
 %%--------------------------------------------------------------------
-on_message_deliver(ClientInfo, Message, Filter) ->
-  {_, _, _, _, _, _, Topic, Payload, _} = Message,
-  ?LOG(error, "Client disconnected, cannot encode reason: ~p ~p ~p", [Topic, Payload]),
+on_message_deliver(#{client_id := ClientId, username := Username}, Message, Filter) ->
+  {_, _, Qos, _, _, _, Topic, Payload, Timestamp} = Message,
+  Retain = true,
+  ?LOG(error, "Client disconnected, cannot encode reason: ~p ~p", [Topic, Payload]),
   emqx_metrics:inc('web_hook.message_deliver'),
+  with_filter(
+    fun() ->
+      emqx_metrics:inc('web_hook.message_deliver'),
+      Params = [{action, message_deliver},
+                {client_id, ClientId},
+                {username, Username},
+                {from_client_id, ClientId},
+                {from_username, Username},
+                {topic, Topic},
+                {qos, Qos},
+                {retain, Retain},
+                {payload, encode_payload({Payload}},
+                {ts, emqx_time:now_secs(Timestamp)}],
+      send_http_request(Params)
+    end, Topic, Filter),
   ok;
 on_message_deliver(#{client_id := ClientId, username := Username}, Message = #message{topic = Topic, flags = #{retain := Retain}}, {Filter}) ->
   with_filter(
