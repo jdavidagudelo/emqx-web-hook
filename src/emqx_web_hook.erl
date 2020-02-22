@@ -291,8 +291,9 @@ on_message_delivered(#{clientid := ClientId, username := Username}, Message = #m
                 , ts => Message#message.timestamp
                 },
       send_http_request(Params)
-    end, Topic, Filter).
-
+    end, Topic, Filter);
+on_message_delivered(Client, Message, Filter) ->
+  ?LOG(error, "Client:~s, Message:~s, Filter:~s", [Client, Message, Filter]).
 %%--------------------------------------------------------------------
 %% Message acked
 %%--------------------------------------------------------------------
