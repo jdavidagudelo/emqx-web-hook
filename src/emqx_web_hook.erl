@@ -78,6 +78,11 @@ unload() ->
           unload_(Hook, binary_to_atom(Fun, utf8))
       end, parse_rule(application:get_env(?APP, rules, []))).
 
+decode_clientid(ClientId) when is_binary(ClientId) ->
+    binary:bin_to_list(ClientId);
+decode_clientid(ClientId) ->
+    ClientId.
+
 %%--------------------------------------------------------------------
 %% Client connect
 %%--------------------------------------------------------------------
@@ -258,7 +263,7 @@ on_message_publish(Message = #message{topic = Topic, flags = #{retain := Retain}
         emqx_metrics:inc('web_hook.message_publish'),
         {FromClientId, FromUsername} = format_from(Message),
         Params = #{ action => message_publish
-                  , from_client_id => FromClientId
+                  , from_client_id => decode_clientid(FromClientId)
                   , from_username => FromUsername
                   , topic => Message#message.topic
                   , qos => Message#message.qos
@@ -337,7 +342,6 @@ on_message_acked(#{clientid := ClientId}, Message = #message{topic = Topic, flag
 
 send_http_request(Params) ->
     ClientId = proplists:get_value(<<"clientid">>, Params),
-    ?LOG(error, "Params: ~p", [ClientId]),
     Params1 = emqx_json:encode(Params),
     Url = application:get_env(?APP, url, "http://127.0.0.1"),
     ?LOG(debug, "Url:~p, params:~s", [Url, Params1]),
