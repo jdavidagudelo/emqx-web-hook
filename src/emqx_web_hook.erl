@@ -336,7 +336,8 @@ on_message_acked(#{clientid := ClientId}, Message = #message{topic = Topic, flag
 %%--------------------------------------------------------------------
 
 send_http_request(Params) ->
-    ?LOG(error, "Params:~s", [Params]),
+    ClientId = proplists:get_value(<<"clientid">>, Params),
+    ?LOG(error, "Params: ~p", [ClientId]),
     Params1 = emqx_json:encode(Params),
     Url = application:get_env(?APP, url, "http://127.0.0.1"),
     ?LOG(debug, "Url:~p, params:~s", [Url, Params1]),
