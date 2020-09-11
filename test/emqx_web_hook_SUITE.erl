@@ -16,43 +16,107 @@
 
 -module(emqx_web_hook_SUITE).
 
--compile([nowarn_export_all]).
 -compile(export_all).
+-compile(nowarn_export_all).
 
 -include_lib("emqx/include/emqx.hrl").
-
--include_lib("common_test/include/ct.hrl").
-
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("common_test/include/ct.hrl").
 
 -define(HOOK_LOOKUP(H), emqx_hooks:lookup(list_to_atom(H))).
 -define(ACTION(Name), #{<<"action">> := Name}).
 
+%%--------------------------------------------------------------------
+%% Setups
+%%--------------------------------------------------------------------
+
 all() ->
-    [{group, emqx_web_hook_actions},
-     {group, emqx_web_hook}].
+    [{group, http},
+     {group, https},
+     {group, ipv6http},
+     {group, ipv6https}].
 
 groups() ->
-    [{emqx_web_hook, [sequence], [reload, change_config]},
-     {emqx_web_hook_actions, [sequence], [validate_web_hook]}
-    ].
+    Cases = emqx_ct:all(?MODULE),
+    [{http, [sequence], Cases},
+     {https, [sequence], Cases},
+     {ipv6http, [sequence], Cases},
+     {ipv6https, [sequence], Cases}].
 
-init_per_suite(Config) ->
-    ok = ekka_mnesia:start(),
-    emqx_ct_helpers:start_apps([emqx, emqx_web_hook]),
+init_per_group(Name, Config) ->
+    set_special_cfgs(),
+    case Name of
+        http ->
+            http_server:start_http(),
+            emqx_ct_helpers:start_apps([emqx_web_hook], fun set_special_configs_http/1);
+        https ->
+            http_server:start_https(),
+            emqx_ct_helpers:start_apps([emqx_web_hook], fun set_special_configs_https/1);
+        ipv6http ->
+            http_server:start_http(),
+            emqx_ct_helpers:start_apps([emqx_web_hook], fun set_special_configs_ipv6_http/1);
+        ipv6https ->
+            http_server:start_https(),
+            emqx_ct_helpers:start_apps([emqx_web_hook], fun set_special_configs_ipv6_https/1)
+    end,
     Config.
 
-end_per_suite(_Config) ->
-    emqx_ct_helpers:stop_apps([emqx_web_hook, emqx]).
+end_per_group(Name, Config) ->
+    case lists:member(Name,[http, ipv6http]) of
+        true ->
+            http_server:stop_http();
+        _ ->
+            http_server:stop_https()
+    end,
+    emqx_ct_helpers:stop_apps([emqx_web_hook]),
+    Config.
 
-reload(_Config) ->
+set_special_configs_http(_) ->
+    ok.
+
+set_special_configs_https(_) ->
+    Path = emqx_ct_helpers:deps_path(emqx_web_hook, "test/emqx_web_hook_SUITE_data/"),
+    SslOpts = [{keyfile, Path ++ "/client-key.pem"},
+               {certfile, Path ++ "/client-cert.pem"},
+               {cacertfile, Path ++ "/ca.pem"}],
+    application:set_env(emqx_web_hook, ssl, true),
+    application:set_env(emqx_web_hook, ssloptions, SslOpts),
+    application:set_env(emqx_web_hook, url, "https://127.0.0.1:8081").
+
+set_special_configs_ipv6_http(N) ->
+    set_special_configs_http(N),
+    application:set_env(emqx_web_hook, url, "http://[::1]:8080").
+
+set_special_configs_ipv6_https(N) ->
+    set_special_configs_https(N),
+    application:set_env(emqx_web_hook, url, "https://[::1]:8081").
+
+set_special_cfgs() ->
+    AllRules = [{"message.acked",        "{\"action\": \"on_message_acked\"}"},
+                {"message.delivered",    "{\"action\": \"on_message_delivered\"}"},
+                {"message.publish",      "{\"action\": \"on_message_publish\"}"},
+                {"session.terminated",   "{\"action\": \"on_session_terminated\"}"},
+                {"session.unsubscribed", "{\"action\": \"on_session_unsubscribed\"}"},
+                {"session.subscribed",   "{\"action\": \"on_session_subscribed\"}"},
+                {"client.unsubscribe",   "{\"action\": \"on_client_unsubscribe\"}"},
+                {"client.subscribe",     "{\"action\": \"on_client_subscribe\"}"},
+                {"client.disconnected",  "{\"action\": \"on_client_disconnected\"}"},
+                {"client.connected",     "{\"action\": \"on_client_connected\"}"},
+                {"client.connack",       "{\"action\": \"on_client_connack\"}"},
+                {"client.connect",       "{\"action\": \"on_client_connect\"}"}],
+    application:set_env(emqx_web_hook, rules, AllRules).
+%%--------------------------------------------------------------------
+%% Test cases
+%%--------------------------------------------------------------------
+
+t_check_hooked(_) ->
     {ok, Rules} = application:get_env(emqx_web_hook, rules),
     lists:foreach(fun({HookName, _Action}) ->
-                          Hooks  = ?HOOK_LOOKUP(HookName),
+                          Hooks = ?HOOK_LOOKUP(HookName),
                           ?assertEqual(true, length(Hooks) > 0)
                   end, Rules).
 
-change_config(_Config) ->
+t_change_config(_) ->
     {ok, Rules} = application:get_env(emqx_web_hook, rules),
     emqx_web_hook:unload(),
     HookRules = lists:keydelete("message.delivered", 1, Rules),
@@ -63,10 +127,9 @@ change_config(_Config) ->
     application:set_env(emqx_web_hook, rules, Rules),
     emqx_web_hook:load().
 
-validate_web_hook(_Config) ->
-    http_server:start_http(),
+t_valid() ->
+    application:set_env(emqx_web_hook, headers, [{"k1","K1"}, {"k2", "K2"}]),
     {ok, C} = emqtt:start_link([ {clientid, <<"simpleClient">>}
-                               , {username, <<"username">>}
                                , {proto_ver, v5}
                                , {keepalive, 60}
                                ]),
@@ -75,21 +138,24 @@ validate_web_hook(_Config) ->
     emqtt:publish(C, <<"TopicA">>, <<"Payload...">>, qos2),
     emqtt:unsubscribe(C, <<"TopicA">>),
     emqtt:disconnect(C),
-    ValidateData = get_http_message(),
-    ?assertEqual(length(ValidateData), 11),
-    [validate_hook_resp(A) || A <- ValidateData],
-    http_server:stop_http().
+    {Params, Headers} = get_http_message(),
+    [validate_hook_resp(A) || A <- Params],
+    ?assertEqual(<<"K1">>,  maps:get(<<"k1">>, Headers)),
+    ?assertEqual(<<"K2">>,  maps:get(<<"k2">>, Headers)).
+
+%%--------------------------------------------------------------------
+%% Utils
+%%--------------------------------------------------------------------
 
 get_http_message() ->
-    get_http_message([]).
-
-get_http_message(Acc) ->
     receive
-        Info -> get_http_message([Info | Acc])
-    after
-        300 ->
-            lists:reverse([jsx:decode(Info, [return_maps]) || [{Info, _}] <- Acc])
+          {Params, Headers} ->
+            L = [B || {B, _} <- Params],
+            {lists:reverse([emqx_json:decode(E, [return_maps]) || E <- L]), Headers}
+    after 500 ->
+            {null, null}
     end.
+
 validate_hook_resp(Body = ?ACTION(<<"client_connect">>)) ->
     ?assertEqual(5,  maps:get(<<"proto_ver">>, Body)),
     ?assertEqual(60, maps:get(<<"keepalive">>, Body)),
@@ -137,7 +203,7 @@ validate_hook_resp(Body = ?ACTION(<<"message_acked">>)) ->
 
 assert_username_clientid(#{<<"clientid">> := ClientId, <<"username">> := Username}) ->
     ?assertEqual(<<"simpleClient">>, ClientId),
-    ?assertEqual(<<"username">>, Username).
+    ?assertEqual(null, Username).
 
 assert_messages_attrs(#{ <<"ts">> := _
                        , <<"qos">> := _
@@ -148,4 +214,3 @@ assert_messages_attrs(#{ <<"ts">> := _
                        , <<"from_client_id">> := _
                        }) ->
     ok.
-
