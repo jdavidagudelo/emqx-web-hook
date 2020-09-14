@@ -281,25 +281,6 @@ on_message_publish(Message = #message{topic = Topic, flags = #{retain := Retain}
 %% Message deliver
 %%--------------------------------------------------------------------
 
-on_message_delivered(#{clientid := ClientId, username := Username},
-                     Message = #message{topic = Topic}, {Filter}) ->
-  with_filter(
-    fun() ->
-      emqx_metrics:inc('webhook.message_delivered'),
-      {FromClientId, FromUsername} = format_from(Message),
-      Params = #{ action => message_delivered
-                , clientid => decode_clientid(ClientId)
-                , username => Username
-                , from_client_id => FromClientId
-                , from_username => FromUsername
-                , topic => Message#message.topic
-                , qos => Message#message.qos
-                , retain => false
-                , payload => encode_payload(Message#message.payload)
-                , ts => Message#message.timestamp
-                },
-      send_http_request(Params)
-    end, Topic, Filter);
 on_message_delivered(#{clientid := ClientId, username := Username}, Message = #message{topic = Topic, flags = #{retain := Retain}}, {Filter}) ->
   with_filter(
     fun() ->
