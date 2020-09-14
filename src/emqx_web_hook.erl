@@ -294,7 +294,7 @@ on_message_delivered(#{clientid := ClientId, username := Username},
                 , from_username => FromUsername
                 , topic => Message#message.topic
                 , qos => Message#message.qos
-                , retain => emqx_message:get_flag(retain, Message)
+                , retain => false
                 , payload => encode_payload(Message#message.payload)
                 , ts => Message#message.timestamp
                 },
