@@ -78,10 +78,12 @@ unload() ->
           unload_(Hook, binary_to_atom(Fun, utf8))
       end, parse_rule(application:get_env(?APP, rules, []))).
 
-decode_clientid(ClientId) when is_binary(ClientId) ->
-    binary:bin_to_list(ClientId);
 decode_clientid(ClientId) ->
-    ClientId.
+    IsValidClientId = unicode:bin_is_7bit(ClientId),
+    if IsValidClientId ->
+        ClientId;
+        true -> base64:encode(binary:bin_to_list(ClientId))
+    end.
 
 %%--------------------------------------------------------------------
 %% Client connect
