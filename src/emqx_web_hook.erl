@@ -83,7 +83,7 @@ decode_clientid(ClientId) ->
     IsNotBinaryClientId = not is_binary(ClientId),
     if IsValidClientId or IsNotBinaryClientId ->
         ClientId;
-        true -> ClientId
+        true -> encode_payload(binary:bin_to_list(ClientId), base64)
     end.
 
 %%--------------------------------------------------------------------
