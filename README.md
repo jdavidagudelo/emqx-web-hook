@@ -1,32 +1,36 @@
 
-emqx-web-hook
-=============
+# emqx-web-hook
 
-EMQ X Webhook plugin.
+EMQ X WebHook plugin.
 
-Setup
------
+Please see: [EMQ X - WebHook](https://docs.emqx.io/broker/latest/en/advanced/webhook.html)
 
-##### In Makefile,
+## emqx_web_hook.conf
 
-DEPS += emqx_web_hook
+```properties
+## The web services URL for Hook request
+##
+## Value: String
+web.hook.api.url = http://127.0.0.1:8080
 
-dep_emqx_web_hook = git git@github.com:emqx/emqx-web-hook.git master
+## Encode message payload field
+##
+## Value: base64 | base62
+## web.hook.encode_payload = base64
 
-##### In relx.config
+##--------------------------------------------------------------------
+## Hook Rules
 
-{emqx_webhook_plugin, load}
-
-##### emqx_web_hook.conf
-
-```
-web.hook.api.url = http://127.0.0.1
-
+## These configuration items represent a list of events should be forwarded
+##
+## Format:
+##   web.hook.rule.<HookName>.<No> = <Spec>
+web.hook.rule.client.connect.1       = {"action": "on_client_connect"}
+web.hook.rule.client.connack.1       = {"action": "on_client_connack"}
 web.hook.rule.client.connected.1     = {"action": "on_client_connected"}
 web.hook.rule.client.disconnected.1  = {"action": "on_client_disconnected"}
 web.hook.rule.client.subscribe.1     = {"action": "on_client_subscribe"}
 web.hook.rule.client.unsubscribe.1   = {"action": "on_client_unsubscribe"}
-web.hook.rule.session.created.1      = {"action": "on_session_created"}
 web.hook.rule.session.subscribed.1   = {"action": "on_session_subscribed"}
 web.hook.rule.session.unsubscribed.1 = {"action": "on_session_unsubscribed"}
 web.hook.rule.session.terminated.1   = {"action": "on_session_terminated"}
@@ -35,14 +39,20 @@ web.hook.rule.message.delivered.1    = {"action": "on_message_delivered"}
 web.hook.rule.message.acked.1        = {"action": "on_message_acked"}
 ```
 
-API
-----
+## API
+
+The HTTP request parameter format:
+
 * client.connected
 ```json
 {
     "action":"client_connected",
-    "client_id":"C_1492410235117",
+    "clientid":"C_1492410235117",
     "username":"C_1492410235117",
+    "keepalive": 60,
+    "ipaddress": "127.0.0.1",
+    "proto_ver": 4,
+    "connected_at": 1556176748,
     "conn_ack":0
 }
 ```
@@ -51,7 +61,7 @@ API
 ```json
 {
     "action":"client_disconnected",
-    "client_id":"C_1492410235117",
+    "clientid":"C_1492410235117",
     "username":"C_1492410235117",
     "reason":"normal"
 }
@@ -61,7 +71,7 @@ API
 ```json
 {
     "action":"client_subscribe",
-    "client_id":"C_1492410235117",
+    "clientid":"C_1492410235117",
     "username":"C_1492410235117",
     "topic":"world",
     "opts":{
@@ -74,7 +84,7 @@ API
 ```json
 {
     "action":"client_unsubscribe",
-    "client_id":"C_1492410235117",
+    "clientid":"C_1492410235117",
     "username":"C_1492410235117",
     "topic":"world"
 }
@@ -84,7 +94,7 @@ API
 ```json
 {
     "action":"session_created",
-    "client_id":"C_1492410235117",
+    "clientid":"C_1492410235117",
     "username":"C_1492410235117"
 }
 ```
@@ -93,7 +103,7 @@ API
 ```json
 {
     "action":"session_subscribed",
-    "client_id":"C_1492410235117",
+    "clientid":"C_1492410235117",
     "username":"C_1492410235117",
     "topic":"world",
     "opts":{
@@ -106,7 +116,7 @@ API
 ```json
 {
     "action":"session_unsubscribed",
-    "client_id":"C_1492410235117",
+    "clientid":"C_1492410235117",
     "username":"C_1492410235117",
     "topic":"world"
 }
@@ -116,7 +126,7 @@ API
 ```json
 {
     "action":"session_terminated",
-    "client_id":"C_1492410235117",
+    "clientid":"C_1492410235117",
     "username":"C_1492410235117",
     "reason":"normal"
 }
@@ -140,7 +150,7 @@ API
 ```json
 {
     "action":"message_delivered",
-    "client_id":"C_1492410235117",
+    "clientid":"C_1492410235117",
     "username":"C_1492410235117",
     "from_client_id":"C_1492410235117",
     "from_username":"C_1492410235117",
@@ -156,7 +166,7 @@ API
 ```json
 {
     "action":"message_acked",
-    "client_id":"C_1492410235117",
+    "clientid":"C_1492410235117",
     "username":"C_1492410235117",
     "from_client_id":"C_1492410235117",
     "from_username":"C_1492410235117",
@@ -168,21 +178,17 @@ API
 }
 ```
 
-License
--------
+## License
 
 Apache License Version 2.0
 
-Author
-------
+## Author
 
 * [Sakib Sami](https://github.com/s4kibs4mi)
 
-Contributors
-------------
+## Contributors
 
 * [Deng](https://github.com/turtleDeng)
 * [vishr](https://github.com/vishr)
 * [emqplus](https://github.com/emqplus)
 * [huangdan](https://github.com/huangdan)
-
