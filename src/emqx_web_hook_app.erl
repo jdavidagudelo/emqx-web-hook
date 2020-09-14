@@ -20,15 +20,19 @@
 
 -emqx_plugin(?MODULE).
 
+-define(APP, emqx_web_hook).
+
 -export([ start/2
         , stop/1
         ]).
 
 start(_StartType, _StartArgs) ->
     {ok, Sup} = emqx_web_hook_sup:start_link(),
-    emqx_web_hook:register_metrics(),
-    emqx_web_hook:load(),
+    ?APP:register_metrics(),
+    ?APP:load(),
     {ok, Sup}.
 
 stop(_State) ->
-    emqx_web_hook:unload().
+    emqx_web_hook:unload(),
+    ok.
+

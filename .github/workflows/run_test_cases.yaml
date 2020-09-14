@@ -11,15 +11,11 @@ jobs:
             
         steps:
             - uses: actions/checkout@v1
-            - name: code dialyzer
-              run: |
-                make xref
-                make dialyzer
             - name: run test cases
               run: |
+                make xref
                 make eunit  
                 make ct
-                make proper
                 make cover
             - uses: actions/upload-artifact@v1
               if: always()
