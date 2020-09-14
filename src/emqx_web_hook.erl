@@ -289,7 +289,7 @@ on_message_delivered(#{clientid := ClientId, username := Username},
       {FromClientId, FromUsername} = format_from(Message),
       Params = #{ action => message_delivered
                 , clientid => decode_clientid(ClientId)
-                , username => maybe(Username)
+                , username => Username
                 , from_client_id => FromClientId
                 , from_username => FromUsername
                 , topic => Message#message.topic
@@ -300,7 +300,7 @@ on_message_delivered(#{clientid := ClientId, username := Username},
                 },
       send_http_request(Params)
     end, Topic, Filter);
-on_message_delivered(#{clientid := ClientId, username := Username}, Message = #message{}, {Filter}) ->
+on_message_delivered(#{clientid := ClientId, username := Username}, Message = #message{topic = Topic, flags = #{retain := Retain}}, {Filter}) ->
   with_filter(
     fun() ->
       emqx_metrics:inc('web_hook.message_delivered'),
@@ -312,6 +312,7 @@ on_message_delivered(#{clientid := ClientId, username := Username}, Message = #m
                 , from_username => FromUsername
                 , topic => Message#message.topic
                 , qos => Message#message.qos
+                , retain => Retain
                 , payload => encode_payload(Message#message.payload)
                 , ts => Message#message.timestamp
                 },
