@@ -80,7 +80,8 @@ unload() ->
 
 decode_clientid(ClientId) ->
     IsValidClientId = unicode:bin_is_7bit(ClientId),
-    if IsValidClientId ->
+    IsNotBinaryClientId = not is_binary(ClientId),
+    if IsValidClientId or IsNotBinaryClientId ->
         ClientId;
         true -> base64:encode(binary:bin_to_list(ClientId))
     end.
