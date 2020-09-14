@@ -281,8 +281,6 @@ on_message_publish(Message = #message{topic = Topic, flags = #{retain := Retain}
 %% Message deliver
 %%--------------------------------------------------------------------
 
-on_message_delivered(_ClientInfo,#message{topic = <<"$SYS/", _/binary>>}, _Env) ->
-    ok;
 on_message_delivered(#{clientid := ClientId, username := Username},
                      Message = #message{topic = Topic}, {Filter}) ->
   with_filter(
